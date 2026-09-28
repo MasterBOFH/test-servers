@@ -1,0 +1,33 @@
+#
+# Answers for UnrealIRCd's ./Config, consumed non-interactively via
+# `./Config -quick` (which sources this file and runs ./configure with it,
+# skipping every prompt). Variable names match what ./Config itself writes.
+#
+BASEPATH="/home/ircd/unrealircd"
+BINDIR="/home/ircd/unrealircd/bin"
+DATADIR="/home/ircd/unrealircd/data"
+CONFDIR="/home/ircd/unrealircd/conf"
+MODULESDIR="/home/ircd/unrealircd/modules"
+LOGDIR="/home/ircd/unrealircd/logs"
+CACHEDIR="/home/ircd/unrealircd/cache"
+DOCDIR="/home/ircd/unrealircd/doc"
+TMPDIR="/home/ircd/unrealircd/tmp"
+PRIVATELIBDIR="/home/ircd/unrealircd/lib"
+MAXCONNECTIONS_REQUEST="auto"
+NICKNAMEHISTORYLENGTH="2000"
+# No external GeoIP library. This alone doesn't stop GeoIP: the built-in
+# engines are still built and modules.default.conf still downloads their
+# databases, which unrealircd.conf turns off with NO_DEFAULT_GEOIP.
+GEOIP="none"
+DEFPERM="0600"
+SSLDIR=""
+REMOTEINC=""
+CURLDIR=""
+NOOPEROVERRIDE=""
+OPEROVERRIDEVERIFY=""
+# Unused by -quick (it only generates a cert in interactive mode); the
+# image uses the repo's shared certs/server.{crt,key} instead.
+GENCERTIFICATE="0"
+SANITIZER=""
+EXTRAPARA=""
+ADVANCED=""
