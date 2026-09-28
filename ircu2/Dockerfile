@@ -8,11 +8,18 @@ ARG IRCU_TAG=u2.10.12.19
 ARG IRCU_COMMIT=08df0f21fa4086ce98a3e9b415b5afbe78872bff
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates git build-essential flex bison \
+      ca-certificates git build-essential flex bison autotools-dev \
  && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch "${IRCU_TAG}" https://github.com/UndernetIRC/ircu2 /src \
  && test "$(git -C /src rev-parse HEAD)" = "${IRCU_COMMIT}"
 WORKDIR /src
+# The shipped config.guess/config.sub predate aarch64 (pre-2012), so
+# configure can't identify an arm64 build machine. Replace them with
+# Debian's current copies, as Debian's own packaging does.
+RUN find . -name config.guess -exec cp /usr/share/misc/config.guess {} \; \
+ && find . -name config.sub -exec cp /usr/share/misc/config.sub {} \; \
+ && test -n "$(find . -name config.guess)" \
+ && for g in $(find . -name config.guess); do sh "$g" >/dev/null; done
 # --with-maxcon: configure otherwise takes `ulimit -Hn` of the build
 #   container (~1e9 under Docker) and sizes its connection tables by it.
 # --with-domain: else read from the build host's resolv.conf (not
