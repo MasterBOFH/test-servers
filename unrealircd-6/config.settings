@@ -29,5 +29,8 @@ OPEROVERRIDEVERIFY=""
 # image uses the repo's shared certs/server.{crt,key} instead.
 GENCERTIFICATE="0"
 SANITIZER=""
-EXTRAPARA=""
+# Debian's libargon2, not the bundled copy: that one is compiled for the
+# build machine's CPU (-march=native), so an image built on a CI runner
+# crashes with "Illegal instruction" at startup on an older CPU.
+EXTRAPARA="--with-system-argon2"
 ADVANCED=""

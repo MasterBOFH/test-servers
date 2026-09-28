@@ -40,6 +40,10 @@ COPY --chown=ircd:ircd unrealircd-6/config.settings ./config.settings
 RUN ./Config -quick \
  && make -j"$(nproc)" \
  && make install
+# Fail the build unless UnrealIRCd links Debian's libargon2 (see
+# config.settings): the bundled one is tuned to the build machine's CPU.
+RUN ldd /home/ircd/unrealircd/bin/unrealircd | grep -q '^\s*libargon2\.so\.1 => /lib/' \
+ && ! ls /home/ircd/unrealircd/lib | grep -q argon2
 
 # Shared test certificate (leaf + CA chain, so clients can verify against
 # certs/ca.crt), at the paths set::tls in unrealircd.conf points to.
