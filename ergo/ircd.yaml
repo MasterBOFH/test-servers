@@ -1,0 +1,170 @@
+# Minimal Ergo config for the test-servers suite.
+# NOT a production config: everything that could reject, delay, or
+# throttle a burst of fresh test clients is relaxed or off.
+#
+# Settings left out take Ergo's built-in defaults, which for most optional
+# features means "off"; the ones kept here are the stock default.yaml
+# behaviour that clients notice (history, multiclient, SASL, limits).
+#
+# Why no connect-back checks (ident, reverse DNS): tests usually connect
+# from the Docker host, so the ircd sees the Docker bridge gateway as the
+# client; a host firewall that drops connect-backs, or a resolver that
+# never answers PTR queries for the bridge range, makes each check wait
+# out its full timeout and delays registration by seconds.
+
+network:
+    name: ExampleNet
+
+server:
+    name: ergo.example.irc.com
+    listeners:
+        # Plaintext clients.
+        ":4449":
+        # TLS clients, with the repo's shared certificate: leaf + CA chain,
+        # so clients can verify it against certs/ca.crt.
+        ":5559":
+            tls:
+                cert: /etc/ergo/server-chain.crt
+                key: /etc/ergo/server.key
+            min-tls-version: 1.2
+    casemapping: "ascii"
+    enforce-utf8: true
+    # No reverse DNS lookup and no ident check (see header).
+    lookup-hostnames: false
+    forward-confirm-hostnames: false
+    check-ident: false
+    motd: /etc/ergo/ergo.motd
+    max-sendq: 96k
+    idle-timeouts:
+        registration: 60s
+        ping: 1m30s
+        disconnect: 2m30s
+    compatibility:
+        force-trailing: true
+        send-unprefixed-sasl: true
+    # Stock default is 16 concurrent connections per IP and 32 per 10
+    # minutes; tests open many clients from one IP (the Docker gateway),
+    # both at once and back to back.
+    ip-limits:
+        count: false
+        throttle: false
+
+accounts:
+    # SASL and account registration stay available for tests that want
+    # them, but nothing requires an account (require-sasl is off by default).
+    authentication-enabled: true
+    registration:
+        enabled: true
+        allow-before-connect: true
+        # Stock default throttles to 30 registrations per 10 minutes.
+        throttling:
+            enabled: false
+        bcrypt-cost: 4
+    # Stock default allows 3 failed logins a minute; tests exercising
+    # failed SASL would trip it.
+    login-throttling:
+        enabled: false
+    login-via-pass-command: true
+    advertise-scram: true
+    nick-reservation:
+        enabled: true
+        method: strict
+        guest-nickname-format: "Guest-*"
+        force-nick-equals-account: true
+    multiclient:
+        enabled: true
+        allowed-by-default: true
+        always-on: "opt-in"
+        auto-away: "opt-in"
+
+channels:
+    # Stock default is +ntC; +C (no CTCP) is Ergo-specific, so use the
+    # vanilla +nt. The first joiner of an unregistered channel gets ops;
+    # channel registration is available but never needed for that.
+    default-modes: +nt
+    max-channels-per-client: 100
+    registration:
+        enabled: true
+        max-channels-per-account: 15
+
+# Two opers with every capability, from any host, password "password".
+# Ergo only accepts bcrypt hashes here; this one was generated with
+#   echo password | docker run --rm -i --entrypoint /ircd-bin/ergo ghcr.io/ergochat/ergo:v2.19.1 genpasswd
+# Opering needs no account login and no client certificate.
+oper-classes:
+    "server-admin":
+        title: Server Admin
+        capabilities:
+            - "kill"
+            - "ban"
+            - "nofakelag"
+            - "relaymsg"
+            - "vhosts"
+            - "sajoin"
+            - "samode"
+            - "snomasks"
+            - "roleplay"
+            - "rehash"
+            - "accreg"
+            - "chanreg"
+            - "history"
+            - "defcon"
+            - "massmessage"
+            - "metadata"
+
+opers:
+    alice:
+        class: "server-admin"
+        whois-line: is a server administrator
+        password: "$2a$04$B/1rycYXA0z6jFiM3zWQQ.8AJk7o3li4nLfxtRcbs5dG0KC0zcHWy"
+    daniel:
+        class: "server-admin"
+        whois-line: is a server administrator
+        password: "$2a$04$B/1rycYXA0z6jFiM3zWQQ.8AJk7o3li4nLfxtRcbs5dG0KC0zcHWy"
+
+logging:
+    -
+        method: stderr
+        type: "* -userinput -useroutput"
+        level: info
+
+# Outside the image's /ircd volume (see the Dockerfile).
+lock-file: "/var/lib/ergo/ircd.lock"
+datastore:
+    path: /var/lib/ergo/ircd.db
+    autoupgrade: true
+
+limits:
+    nicklen: 32
+    identlen: 20
+    realnamelen: 150
+    channellen: 64
+    awaylen: 390
+    kicklen: 390
+    topiclen: 390
+    monitor-entries: 100
+    whowas-entries: 100
+    chan-list-modes: 100
+    registration-messages: 1024
+    multiline:
+        max-bytes: 4096
+        max-lines: 100
+
+# Stock default fakelag delays a client after a burst of 5 lines (then 2
+# a second); tests fire commands back to back and expect prompt replies.
+fakelag:
+    enabled: false
+
+# In-memory history (CHATHISTORY, playback), as in the stock config.
+history:
+    enabled: true
+    channel-length: 2048
+    client-length: 256
+    autoresize-window: 3d
+    autoreplay-on-join: 0
+    chathistory-maxmessages: 1000
+    znc-maxmessages: 2048
+    restrictions:
+        expire-time: 1w
+        query-cutoff: 'none'
+        grace-period: 1h
