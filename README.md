@@ -1,60 +1,91 @@
-# IRC Foundation IRCd Testing Docker Images
-This is a collection of Docker images to help us test while writing documentation. The images are hosted on the [irccom DockerHub org](https://hub.docker.com/u/irccom).
+# IRCd test servers
 
-**These images/containers are not meant to be secure or easily-configurable. They are meant to be easy to test. They use hardcoded credentials and default configs.** If you are running a real network, use other images and builds of these servers.
+Docker images of the major IRC servers, each built from a pinned upstream
+release and configured to be easy to test against: IRC clients, bots,
+bouncers, bridges, and documentation of how servers actually behave.
 
-The companion repo to this one is [irccom/script-runner](https://github.com/irccom/script-runner), a collection of scripts that we use to test particular commands and functions across a range of servers.
+Forked from [irccom/test-servers](https://github.com/irccom/test-servers)
+(last updated 2020), rebuilt on current releases and published to the
+GitHub Container Registry.
 
------
+**These images are not secure and not meant to run a real network.** They
+use hardcoded oper passwords, a published TLS key, and have every
+anti-abuse limit turned off.
 
-To use, install [Docker](https://www.docker.com/get-started) and then run one of these commands:
+## Servers
 
-```sh
-# IRCd-irc2 - port 4440
-$ docker run --rm -it -p 4440:4440 -p 5550:5550 irccom/ircd-irc2:latest
+| Image | Software | Version | Plaintext | TLS |
+|---|---|---|---|---|
+| `ircd-irc2` | IRCnet ircd | 2.11.3 | 4440 | — ¹ |
+| `unrealircd-6` | UnrealIRCd | 6.2.7 | 4441 | 5551 |
+| `ircd-hybrid-8` | ircd-hybrid | 8.2.47 | 4442 | 5552 |
+| `ircu2` | ircu (Undernet) | u2.10.12.19 | 4443 | — ¹ |
+| `bahamut` | Bahamut (DALnet) | 2.2.4 | 4444 | 5554 |
+| `ngircd` | ngIRCd | 28 ³ | 4445 | 5555 |
+| `ircd-ratbox` | ircd-ratbox | 3.0.10 | 4446 | 5556 |
+| `solanum` | Solanum (Libera.Chat) | `03503ff` ² | 4447 | 5557 |
+| `inspircd-4` | InspIRCd | 4.12.1 | 4448 | 5558 |
+| `ergo` | Ergo | 2.19.1 | 4449 | 5559 |
 
-# UnrealIRCd 4 - port 4441
-$ docker run --rm -it -p 4441:4441 -p 5551:5551 irccom/unreal4:latest
+¹ No native TLS in this version.
+² Solanum doesn't tag releases; the image pins a commit on its default branch.
+³ Nicks are limited to 9 characters (the RFC default), shorter than on the other servers.
 
-# ircd-hybrid - port 4442
-$ docker run --rm -it -p 4442:4442 -p 5552:5552 irccom/ircd-hybrid:latest
+Images are `ghcr.io/masterbofh/test-servers/<image>`, tagged `:latest` and
+with the upstream version (e.g. `ghcr.io/masterbofh/test-servers/solanum:03503ff…`).
 
-# ircu2 - port 4443
-$ docker run --rm -it -p 4443:4443 -p 5553:5553 irccom/ircu2:latest
+## Running
 
-# Bahamut - port 4444
-$ docker run --rm -it -p 4444:4444 -p 5554:5554 irccom/bahamut:latest
-
-# ngIRCd - port 4445
-$ docker run --rm -it -p 4445:4445 -p 5555:5555 irccom/ngircd:latest
-
-# ircd-ratbox - port 4446
-$ docker run --rm -it -p 4446:4446 -p 5556:5556 irccom/ircd-ratbox:latest
-
-# Charybdis - port 4447
-$ docker run --rm -it -p 4447:4447 -p 5557:5557 irccom/charybdis:latest
-
-# InspIRCd - port 4448
-$ docker run --rm -it -p 4448:4448 -p 5558:5558 irccom/inspircd:latest
-```
-
-Or, to start all of these images at once, `cd` to the directory with our [docker-compose.yml file](docker-compose.yml) and run these commands:
+One server:
 
 ```sh
-# start the servers
-docker-compose up -d
-
-# stop the servers
-docker-compose down
+docker run --rm -p 127.0.0.1:4447:4447 -p 127.0.0.1:5557:5557 ghcr.io/masterbofh/test-servers/solanum:latest
 ```
 
------
+All of them, from a checkout of this repo:
 
-On these images:
+```sh
+docker compose pull && docker compose up -d   # prebuilt images
+docker compose up -d --build                  # or build locally
+docker compose down
+```
 
-- The server name is `<software>.example.irc.com`
-- The default oper creds are `alice / password` and `daniel / password`
-- As much as possible uses the default config (we may enable features though).
-- The MOTD is just "This is the MOTD"
-- Throttling / connection limits are disabled.
-- Port 44xx is plaintext, 55xx is TLS, 66xx is websockets.
+The compose file publishes ports on 127.0.0.1 only; change that to test
+from another machine.
+
+## What every image has in common
+
+- Server name `<software>.example.irc.com` (e.g. `solanum.example.irc.com`),
+  network `ExampleNet`.
+- Two opers: `alice` / `password` and `daniel` / `password`.
+- MOTD: "This is the MOTD".
+- Port 44xx is plaintext, 55xx is TLS.
+- TLS uses the certificate in [`certs/`](certs): one cert for
+  `*.example.irc.com`, `localhost` and `127.0.0.1`, signed by a test CA.
+  Trust `certs/ca.crt` in your client to test real certificate
+  verification.
+- No ident, DNSBL or proxy checks and no reverse-DNS lookups: tests usually
+  connect through Docker's port mapping, so the server sees the bridge
+  gateway as the client, and connect-backs or PTR lookups for it tend to
+  hang until their timeouts. A client registers in well under a second.
+- Throttling and connection limits are off: many connections from one
+  address, reconnecting freely, and no flood kills at normal test rates.
+  (ircu2 keeps its default 1024-byte `CLIENT_FLOOD`, so client-side flood
+  pacing can be tested against it.)
+- A channel's first joiner gets ops.
+
+## Testing an image
+
+[`smoke/check.py`](smoke/check.py) checks a running server against those
+conventions — registration time, ops and KICK, both opers, and verified
+TLS:
+
+```sh
+python3 smoke/check.py --plain 4447 --tls 5557
+```
+
+CI runs it against every image on each push and pull request before
+anything is published.
+
+See [DEVELOPING.md](DEVELOPING.md) for how the images are built and how to
+update a version.

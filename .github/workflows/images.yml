@@ -1,0 +1,80 @@
+# Builds every image, smoke-tests it (smoke/check.py), and on master
+# publishes it to ghcr.io/<owner>/test-servers/<name> as :latest and
+# :<upstream version> (the image's org.opencontainers.image.version label).
+name: images
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: ircd-irc2,     plain: 4440 }
+          - { name: unrealircd-6,  plain: 4441, tls: 5551 }
+          - { name: ircd-hybrid-8, plain: 4442, tls: 5552 }
+          - { name: ircu2,         plain: 4443 }
+          - { name: bahamut,       plain: 4444, tls: 5554 }
+          - { name: ngircd,        plain: 4445, tls: 5555 }
+          - { name: ircd-ratbox,   plain: 4446, tls: 5556 }
+          - { name: solanum,       plain: 4447, tls: 5557 }
+          - { name: inspircd-4,    plain: 4448, tls: 5558 }
+          - { name: ergo,          plain: 4449, tls: 5559 }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name
+        id: img
+        run: echo "repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/test-servers/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.name }}/Dockerfile
+          load: true
+          tags: ${{ steps.img.outputs.repo }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Smoke test
+        run: |
+          ports="-p 127.0.0.1:${{ matrix.plain }}:${{ matrix.plain }}"
+          args="--plain ${{ matrix.plain }}"
+          if [ -n "${{ matrix.tls }}" ]; then
+            ports="$ports -p 127.0.0.1:${{ matrix.tls }}:${{ matrix.tls }}"
+            args="$args --tls ${{ matrix.tls }}"
+          fi
+          docker run -d --name smoke $ports ${{ steps.img.outputs.repo }}:ci
+          python3 smoke/check.py $args || { docker logs smoke; exit 1; }
+
+      - name: Log in to ghcr.io
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        run: |
+          repo=${{ steps.img.outputs.repo }}
+          version=$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$repo:ci")
+          test -n "$version"
+          for tag in latest "$version"; do
+            docker tag "$repo:ci" "$repo:$tag"
+            docker push "$repo:$tag"
+          done

@@ -1,52 +1,48 @@
-version: '3'
+# Every test server at once. With prebuilt images:
+#   docker compose pull && docker compose up -d
+# or build them all locally from this checkout:
+#   docker compose up -d --build
+#
+# Ports are published on 127.0.0.1 only: the images use hardcoded oper
+# passwords. Change "127.0.0.1:" to "0.0.0.0:" to test from another machine.
 services:
   ircd-irc2:
-    image: "irccom/ircd-irc2:latest"
-    ports:
-     - "4440:4440"
-     - "5550:5550"
-  unreal4:
-    image: "irccom/unreal4:latest"
-    ports:
-     - "4441:4441"
-     - "5551:5551"
-  ircd-hybrid:
-    image: "irccom/ircd-hybrid:latest"
-    ports:
-     - "4442:4442"
-     - "5552:5552"
+    build: { context: ., dockerfile: ircd-irc2/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/ircd-irc2:latest
+    ports: ["127.0.0.1:4440:4440"]
+  unrealircd-6:
+    build: { context: ., dockerfile: unrealircd-6/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/unrealircd-6:latest
+    ports: ["127.0.0.1:4441:4441", "127.0.0.1:5551:5551"]
+  ircd-hybrid-8:
+    build: { context: ., dockerfile: ircd-hybrid-8/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/ircd-hybrid-8:latest
+    ports: ["127.0.0.1:4442:4442", "127.0.0.1:5552:5552"]
   ircu2:
-    image: "irccom/ircu2:latest"
-    ports:
-     - "4443:4443"
-     - "5553:5553"
+    build: { context: ., dockerfile: ircu2/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/ircu2:latest
+    ports: ["127.0.0.1:4443:4443"]
   bahamut:
-    image: "irccom/bahamut:latest"
-    ports:
-     - "4444:4444"
-     - "5554:5554"
+    build: { context: ., dockerfile: bahamut/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/bahamut:latest
+    ports: ["127.0.0.1:4444:4444", "127.0.0.1:5554:5554"]
   ngircd:
-    image: "irccom/ngircd:latest"
-    ports:
-     - "4445:4445"
-     - "5555:5555"
+    build: { context: ., dockerfile: ngircd/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/ngircd:latest
+    ports: ["127.0.0.1:4445:4445", "127.0.0.1:5555:5555"]
   ircd-ratbox:
-    image: "irccom/ircd-ratbox:latest"
-    ports:
-     - "4446:4446"
-     - "5556:5556"
-  charybdis:
-    image: "irccom/charybdis:latest"
-    ports:
-     - "4447:4447"
-     - "5557:5557"
-  inspircd:
-    image: "irccom/inspircd:latest"
-    ports:
-     - "4448:4448"
-     - "5558:5558"
-  # ircd-seven:
-  #   image: "irccom/ircd-seven:latest"
-  #   ports:
-  #    - "4449:4449"
-  #    - "5559:5559"
+    build: { context: ., dockerfile: ircd-ratbox/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/ircd-ratbox:latest
+    ports: ["127.0.0.1:4446:4446", "127.0.0.1:5556:5556"]
+  solanum:
+    build: { context: ., dockerfile: solanum/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/solanum:latest
+    ports: ["127.0.0.1:4447:4447", "127.0.0.1:5557:5557"]
+  inspircd-4:
+    build: { context: ., dockerfile: inspircd-4/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/inspircd-4:latest
+    ports: ["127.0.0.1:4448:4448", "127.0.0.1:5558:5558"]
+  ergo:
+    build: { context: ., dockerfile: ergo/Dockerfile }
+    image: ghcr.io/masterbofh/test-servers/ergo:latest
+    ports: ["127.0.0.1:4449:4449", "127.0.0.1:5559:5559"]

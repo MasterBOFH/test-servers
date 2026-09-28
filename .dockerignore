@@ -1,0 +1,6 @@
+# Every image builds with the repo root as context (for certs/ and motd.txt);
+# keep the context small.
+.git
+.github
+smoke
+*.md
