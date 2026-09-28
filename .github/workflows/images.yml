@@ -1,6 +1,12 @@
-# Builds every image, smoke-tests it (smoke/check.py), and on master
-# publishes it to ghcr.io/<owner>/test-servers/<name> as :latest and
+# Builds every image natively for linux/amd64 and linux/arm64 (Apple
+# Silicon Macs, ARM servers), smoke-tests each build (smoke/check.py) on
+# its own architecture, and on master publishes one multi-arch image per
+# server to ghcr.io/<owner>/test-servers/<name> as :latest and
 # :<upstream version> (the image's org.opencontainers.image.version label).
+#
+# Builds run on native runners rather than under QEMU: emulated C compiles
+# take many times longer, and an emulated smoke test would hide exactly
+# the architecture-specific breakage it's there to catch.
 name: images
 
 on:
@@ -13,13 +19,20 @@ permissions:
   contents: read
   packages: write
 
+env:
+  PUBLISH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+
 jobs:
-  image:
-    runs-on: ubuntu-latest
+  build:
+    name: ${{ matrix.image.name }} (${{ matrix.platform.arch }})
+    runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
       matrix:
-        include:
+        platform:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+        image:
           - { name: ircd-irc2,     plain: 4440 }
           - { name: unrealircd-6,  plain: 4441, tls: 5551 }
           - { name: ircd-hybrid-8, plain: 4442, tls: 5552 }
@@ -35,7 +48,7 @@ jobs:
 
       - name: Image name
         id: img
-        run: echo "repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/test-servers/${{ matrix.name }}" >> "$GITHUB_OUTPUT"
+        run: echo "repo=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/test-servers/${{ matrix.image.name }}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -43,38 +56,97 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.name }}/Dockerfile
+          file: ${{ matrix.image.name }}/Dockerfile
+          platforms: linux/${{ matrix.platform.arch }}
           load: true
           tags: ${{ steps.img.outputs.repo }}:ci
-          cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
 
       - name: Smoke test
         run: |
-          ports="-p 127.0.0.1:${{ matrix.plain }}:${{ matrix.plain }}"
-          args="--plain ${{ matrix.plain }}"
-          if [ -n "${{ matrix.tls }}" ]; then
-            ports="$ports -p 127.0.0.1:${{ matrix.tls }}:${{ matrix.tls }}"
-            args="$args --tls ${{ matrix.tls }}"
+          ports="-p 127.0.0.1:${{ matrix.image.plain }}:${{ matrix.image.plain }}"
+          args="--plain ${{ matrix.image.plain }}"
+          if [ -n "${{ matrix.image.tls }}" ]; then
+            ports="$ports -p 127.0.0.1:${{ matrix.image.tls }}:${{ matrix.image.tls }}"
+            args="$args --tls ${{ matrix.image.tls }}"
           fi
           docker run -d --name smoke $ports ${{ steps.img.outputs.repo }}:ci
           python3 smoke/check.py $args || { docker logs smoke; exit 1; }
 
       - name: Log in to ghcr.io
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: env.PUBLISH == 'true'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      # Push this architecture's image by digest only; the publish job
+      # below tags the multi-arch image once both architectures pass.
+      - name: Push by digest
+        id: push
+        if: env.PUBLISH == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.name }}/Dockerfile
+          platforms: linux/${{ matrix.platform.arch }}
+          outputs: type=image,name=${{ steps.img.outputs.repo }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.arch }}
+
+      - name: Record digest and version
+        if: env.PUBLISH == 'true'
         run: |
-          repo=${{ steps.img.outputs.repo }}
-          version=$(docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$repo:ci")
+          mkdir -p out
+          digest='${{ steps.push.outputs.digest }}'
+          test -n "$digest"
+          touch "out/${digest#sha256:}"
+          docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' \
+            ${{ steps.img.outputs.repo }}:ci > "out/version-${{ matrix.platform.arch }}"
+
+      - name: Upload digest
+        if: env.PUBLISH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-${{ matrix.image.name }}-${{ matrix.platform.arch }}
+          path: out/*
+          retention-days: 1
+
+  publish:
+    name: publish ${{ matrix.name }}
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: [ircd-irc2, unrealircd-6, ircd-hybrid-8, ircu2, bahamut, ngircd, ircd-ratbox, solanum, inspircd-4, ergo]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: digest-${{ matrix.name }}-*
+          merge-multiple: true
+          path: digests
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag the multi-arch image
+        working-directory: digests
+        run: |
+          repo="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/test-servers/${{ matrix.name }}"
+          # Both architectures must report the same upstream version.
+          version=$(cat version-amd64)
           test -n "$version"
-          for tag in latest "$version"; do
-            docker tag "$repo:ci" "$repo:$tag"
-            docker push "$repo:$tag"
-          done
+          test "$version" = "$(cat version-arm64)"
+          digests=$(ls | grep -v '^version-')
+          test "$(echo "$digests" | wc -l)" -eq 2
+          docker buildx imagetools create -t "$repo:latest" -t "$repo:$version" \
+            $(for d in $digests; do echo "$repo@sha256:$d"; done)
+          docker buildx imagetools inspect "$repo:$version"

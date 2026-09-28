@@ -10,11 +10,18 @@ ARG IRCD_VERSION
 ARG IRCD_COMMIT=a317efddb208626def36970f280d14276c641362
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates git build-essential \
+      ca-certificates git build-essential autotools-dev \
  && rm -rf /var/lib/apt/lists/*
 RUN git clone --depth 1 --branch "v${IRCD_VERSION}" https://github.com/ircnet/ircd /src \
  && test "$(git -C /src rev-parse HEAD)" = "${IRCD_COMMIT}"
 WORKDIR /src
+# The shipped config.guess/config.sub predate aarch64 (pre-2012), so
+# configure can't identify an arm64 build machine. Replace them with
+# Debian's current copies, as Debian's own packaging does.
+RUN find . -name config.guess -exec cp /usr/share/misc/config.guess {} \; \
+ && find . -name config.sub -exec cp /usr/share/misc/config.sub {} \; \
+ && test -n "$(find . -name config.guess)" \
+ && for g in $(find . -name config.guess); do sh "$g" >/dev/null; done
 # This ircd has no switch for reverse DNS on clients. It is not a
 # connect-back, but it still makes each registration wait on the
 # host's resolver (seconds when the resolver ignores PTR queries for

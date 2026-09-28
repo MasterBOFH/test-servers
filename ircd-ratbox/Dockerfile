@@ -18,13 +18,20 @@ ARG RATBOX_VERSION=3.0.10
 ARG RATBOX_SHA256=8d871ab81e8581179c3b831e25bd2f6d4f6dfc77380cb190237221bda247ead4
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      build-essential bzip2 ca-certificates curl patch libssl-dev \
+      build-essential bzip2 ca-certificates curl patch libssl-dev autotools-dev \
  && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL -o /ratbox.tar.bz2 \
       "https://www.ratbox.org/download/ircd-ratbox-${RATBOX_VERSION}.tar.bz2" \
  && echo "${RATBOX_SHA256}  /ratbox.tar.bz2" | sha256sum -c - \
  && mkdir /src && tar -xjf /ratbox.tar.bz2 -C /src --strip-components=1
 WORKDIR /src
+# The shipped config.guess/config.sub predate aarch64 (pre-2012), so
+# configure can't identify an arm64 build machine. Replace them with
+# Debian's current copies, as Debian's own packaging does.
+RUN find . -name config.guess -exec cp /usr/share/misc/config.guess {} \; \
+ && find . -name config.sub -exec cp /usr/share/misc/config.sub {} \; \
+ && test -n "$(find . -name config.guess)" \
+ && for g in $(find . -name config.guess); do sh "$g" >/dev/null; done
 # ratbox has no config switch to skip reverse DNS of connecting clients (and
 # a resolver that never answers PTR queries for the Docker bridge range
 # stalls every registration past a client's timeout), so patch it out.

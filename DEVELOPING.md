@@ -62,10 +62,17 @@ is public on purpose: these are test servers.
 
 ## Publishing
 
-`.github/workflows/images.yml` builds every image on each push and pull
-request, runs `smoke/check.py` against it, and on `master` pushes it to
-`ghcr.io/<owner>/test-servers/<image>` as `:latest` and
-`:<org.opencontainers.image.version>`. A newly published package starts
+`.github/workflows/images.yml` builds every image for `linux/amd64` and
+`linux/arm64` on each push and pull request, each on a native runner of
+that architecture, and runs `smoke/check.py` against each build. On
+`master` it pushes both builds and tags them together as one multi-arch
+image, `ghcr.io/<owner>/test-servers/<image>`, `:latest` and
+`:<org.opencontainers.image.version>`.
+
+Old autotools sources (ircd-irc2, ircu2, ircd-ratbox) ship
+`config.guess`/`config.sub` scripts that predate aarch64; their
+Dockerfiles replace them with Debian's current copies before
+`configure`. A newly published package starts
 out private on GitHub; make it public once in the package's settings.
 
 ## Contributions

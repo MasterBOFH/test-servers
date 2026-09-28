@@ -33,6 +33,8 @@ anti-abuse limit turned off.
 
 Images are `ghcr.io/masterbofh/test-servers/<image>`, tagged `:latest` and
 with the upstream version (e.g. `ghcr.io/masterbofh/test-servers/solanum:03503ff…`).
+Every image is multi-arch — `linux/amd64` and `linux/arm64` — so the same
+tags run natively on Apple Silicon Macs and ARM servers.
 
 ## Running
 
